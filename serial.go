@@ -102,6 +102,5 @@ func (remote *SerialRemote) Recv(timeout time.Duration) ([]byte, error) {
 }
 
 func (remote *SerialRemote) Write(buf []byte, timeout time.Duration) (int, error) {
-	log.Printf("serial:write %v\n", buf)
 	return remote.port.Write(buf)
 }
