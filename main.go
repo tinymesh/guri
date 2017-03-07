@@ -1,11 +1,11 @@
 package main
 
 import (
+	"errors"
+	"flag"
 	"fmt"
-	"io"
 	"log"
 	"os"
-	"path"
 	"time"
 
 	"go.bug.st/serial.v1"
@@ -23,172 +23,84 @@ func PrintPortList() {
 		fmt.Println("No serial ports found!")
 	} else {
 		for _, port := range ports {
-			fmt.Printf("port: %v\n", port)
+			fmt.Printf("%v\n", port)
 		}
 	}
 }
 
-func Open(path string) serial.Port {
-	port, err := serial.Open(path, &serial.Mode{})
-
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "port.Open")
-		log.Fatal(err)
-	}
-
-	mode := &serial.Mode{
-		BaudRate: 19200,
-		Parity:   serial.NoParity,
-		DataBits: 8,
-		StopBits: serial.OneStopBit,
-	}
-
-	if err := port.SetMode(mode); err != nil {
-		fmt.Fprintln(os.Stderr, "port.SetMode")
-		log.Fatal(err)
-	}
-
-	return port
+type Remote interface {
+	Channel() chan []byte
+	Recv(timeout time.Duration) ([]byte, error)
+	Write(buf []byte, timeout time.Duration) (int, error)
+	Open() chan []byte
+	Close() error
 }
 
-func RecvIO(port io.Reader) chan []byte {
-	channel := make(chan []byte, 256)
-	input := make([]byte, 256+2)
-	go func() {
-		for {
-			n, err := io.ReadAtLeast(port, input, 1)
-
-			if n == 0 {
-				fmt.Fprintln(os.Stderr, "STDIN: EOF")
-			}
-
-			if err != nil {
-				fmt.Fprintln(os.Stderr, "io.ReadAtLeast")
-				log.Fatal(err)
-				break
-			}
-
-			channel <- input[0:n]
-		}
-	}()
-
-	return channel
-}
-
-func RecvSerial(port serial.Port) chan []byte {
-	channel := make(chan []byte, 256)
-
-	go func() {
-		acc := make([]byte, 256)
-		input := make([]byte, 256)
-		var pos int = 0
-
-		// spawn a reader serialport reader
-		reader := make(chan int)
-		go func() {
-			for {
-				n, err := port.Read(input)
-
-				// error or EOF
-				if err != nil || n == 0 {
-					log.Printf("Error in serial port reader:\n")
-					if err != nil {
-						log.Print(err)
-					} else {
-						log.Print("EOF")
-					}
-
-					reader <- -1
-					port.Close()
-					close(reader)
-
-					return
-				}
-
-				reader <- n
-			}
-		}()
-
-		for {
-			select {
-			case n := <-reader:
-				// got data or canceled channel
-				if n == -1 {
-					close(channel)
-					return
-				}
-
-				for i := 0; i < n; i++ {
-					acc[pos+i] = input[i]
-				}
-				pos = pos + n
-
-			case <-time.After(2400 * time.Microsecond):
-				if pos > 0 {
-					channel <- acc[:pos]
-					pos = 0
-				}
-			}
-		}
-	}()
-
-	return channel
-}
-
-// - [--usage]: print help
-// - <--list>: list serial ports
-// - <port>: connect to the port
 func main() {
-	args := os.Args
+	helpFlag := flag.Bool("help", false, "Show help text")
+	stdioFlag := flag.Bool("stdio", false, "Use stdio for communication instead of remote")
+	listFlag := flag.Bool("list", false, "List available serialports")
 
 	log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds)
 
-	if len(args) == 1 || "--usage" == args[1] {
-		fmt.Printf("usage: %s --usage | --list | <port>\n", path.Dir(args[0]))
-	} else if "--list" == args[1] {
+	flag.Parse()
+
+	if true == *helpFlag {
+		flag.PrintDefaults()
+		return
+	} else if true == *listFlag {
 		PrintPortList()
-	} else {
-		// connect to port
-		port := Open(args[1])
-		defer port.Close()
-
-		status, err := port.GetModemStatusBits()
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "port.GetModemStatusBits")
-			log.Fatal(err)
-		}
-		fmt.Fprintln(os.Stderr, "port-status: %+v\n", status)
-
-		upstream := RecvIO(os.Stdin)
-		serial := RecvSerial(port)
-
-		for {
-			select {
-			case buf := <-serial:
-				if nil != buf {
-					WriteIO(os.Stdout, buf)
-				} else {
-					log.Fatal("serialport communication failed, exiting...")
-				}
-
-			case buf := <-upstream:
-				if buf[0] == 10 {
-					WriteSerial(port, []byte("\x0a\x00\x00\x00\x00\x03\x03\x10\x00\x00"))
-				} else {
-					WriteSerial(port, buf)
-				}
-			}
-		}
+		return
 	}
 
-}
+	path := flag.Arg(0)
 
-func WriteIO(writer io.Writer, buf []byte) (int, error) {
-	log.Printf("write:stdin: %v\n", buf)
-	return writer.Write(buf)
-}
+	if "" == path {
+		log.Fatal(errors.New("1st argument, tty path, missing"))
+	}
 
-func WriteSerial(port serial.Port, buf []byte) (int, error) {
-	log.Printf("write:serial: %v\n", buf)
-	return port.Write(buf)
+	var upstream Remote
+	var downstream Remote
+	var err error
+
+	log.Printf("serial: opening %v\n", path)
+	downstream, err = ConnectSerial(path)
+
+	if nil != err {
+		log.Fatal(err)
+	}
+
+	if true == *stdioFlag {
+		log.Printf("remote: using stdio")
+		upstream, err = ConnectStdio(os.Stdin, os.Stdout)
+
+		if nil != err {
+			log.Fatalf("error[stdio] %v\n", err)
+		}
+
+	} else {
+		// setup remote communication
+		log.Fatal(errors.New("--remote not implemented"))
+	}
+
+	if nil == upstream {
+		log.Fatal(errors.New("no upstream configured"))
+	}
+
+	downstreamchan := downstream.Open()
+	upstreamchan := upstream.Open()
+
+	for {
+		select {
+		case buf := <-downstreamchan:
+			upstream.Write(buf, -1)
+
+		case buf := <-upstreamchan:
+			if buf[0] == 10 {
+				downstream.Write([]byte("\x0a\x00\x00\x00\x00\x03\x03\x10\x00\x00"), -1)
+			}
+
+			downstream.Write(buf, -1)
+		}
+	}
 }
