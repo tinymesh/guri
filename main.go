@@ -81,14 +81,19 @@ func main() {
 		}
 	} else if true == *usetlsFlag {
 		// setup remote TLS communication
-		log.Fatal(errors.New("--remote with TLS not implemented"))
+		log.Printf("remote: using TCP w/TLS")
+		upstream, err = ConnectTLS(*remoteFlag)
+
+		if nil != err {
+			log.Fatalf("error[tcp/tls] %v\n", err)
+		}
 	} else {
-		// setup remote TLS communication
+		// setup remote TCP communication without TLS
 		log.Printf("remote: using TCP (NO-TLS)")
 		upstream, err = ConnectTCP(*remoteFlag)
 
 		if nil != err {
-			log.Fatalf("error[stdio] %v\n", err)
+			log.Fatalf("error[tcp] %v\n", err)
 		}
 	}
 
