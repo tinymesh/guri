@@ -3,30 +3,10 @@ package main
 import (
 	"errors"
 	"flag"
-	"fmt"
 	"log"
 	"os"
 	"time"
-
-	"go.bug.st/serial.v1"
 )
-
-func PrintPortList() {
-	ports, err := serial.GetPortsList()
-
-	if err != nil {
-		fmt.Println("serial.GetPortsList")
-		log.Fatal(err)
-	}
-
-	if len(ports) == 0 {
-		fmt.Println("No serial ports found!")
-	} else {
-		for _, port := range ports {
-			fmt.Printf("%v\n", port)
-		}
-	}
-}
 
 type Remote interface {
 	Channel() chan []byte
