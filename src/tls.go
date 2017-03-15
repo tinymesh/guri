@@ -34,14 +34,21 @@ func (conn *TLSConn) Channel() chan []byte {
 
 func (conn *TLSConn) Open() chan []byte {
 	go func() {
+
+		defer func() {
+			if r := recover(); r != nil {
+				log.Println("error[tcp/tls:close]:", r)
+			}
+		}()
+
 		for {
 			buf, err := conn.Recv(-1)
 
 			if nil != err {
-				log.Fatalf("error[tcp/tls:recv] %v\n", err)
+				close(conn.channel)
+			} else {
+				conn.channel <- buf
 			}
-
-			conn.channel <- buf
 		}
 	}()
 
@@ -57,7 +64,7 @@ func (conn *TLSConn) Recv(timeout time.Duration) ([]byte, error) {
 	n, err := conn.socket.Read(buf)
 
 	if nil != err {
-		log.Fatalf("error[tcp/tls:recv] %v\n", err)
+		log.Printf("error[tcp/tls:recv] %v\n", err)
 		return nil, err
 	}
 

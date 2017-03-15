@@ -30,14 +30,21 @@ func (conn *TCPConn) Channel() chan []byte {
 
 func (conn *TCPConn) Open() chan []byte {
 	go func() {
+
+		defer func() {
+			if r := recover(); r != nil {
+				log.Println("error[tcp:close]:", r)
+			}
+		}()
+
 		for {
 			buf, err := conn.Recv(-1)
 
 			if nil != err {
-				log.Fatalf("error[tcp:recv] %v\n", err)
+				close(conn.channel)
+			} else {
+				conn.channel <- buf
 			}
-
-			conn.channel <- buf
 		}
 	}()
 
@@ -53,7 +60,7 @@ func (conn *TCPConn) Recv(timeout time.Duration) ([]byte, error) {
 	n, err := conn.socket.Read(buf)
 
 	if nil != err {
-		log.Fatalf("error[tcp:recv] %v\n", err)
+		log.Printf("error[tcp:recv] %v\n", err)
 		return nil, err
 	}
 

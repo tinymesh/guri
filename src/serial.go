@@ -56,6 +56,7 @@ func PrintPortList() {
 }
 
 func ConnectSerial(uri string) (*SerialRemote, error) {
+	log.Printf("serial:open %v\n", uri)
 	port, err := serial.Open(uri, &serial.Mode{})
 
 	if nil != err {
@@ -92,22 +93,42 @@ func (remote *SerialRemote) Open() chan []byte {
 				buf, err := remote.Recv(-1)
 
 				if nil != err {
-					log.Fatal("error[serial:recv] %v\n", err)
+					log.Printf("error[serial:recv]: %v\n", err)
+					close(reader)
+					return
 				} else if 0 == len(buf) {
-					log.Fatal("error[serial:recv] %v\n", errors.New("EOF"))
+					log.Printf("error[serial:recv]#EOF: %v\n", fmt.Errorf("EOF"))
+					close(reader)
+					return
 				}
 
 				reader <- buf
 			}
 		}()
 
+		defer func() {
+			if r := recover(); r != nil {
+				log.Println("error[serial:close]:", r)
+			}
+		}()
+
 		for {
 			select {
-			case buf := <-reader:
-				for i := 0; i < len(buf); i++ {
-					acc[pos+i] = buf[i]
+			case buf, state := <-reader:
+				if false == state {
+					err := remote.Close()
+
+					if nil != err {
+						log.Printf("error[serial:close]: failed to close: %v\n", err)
+					}
+
+					close(remote.channel)
+				} else {
+					for i := 0; i < len(buf); i++ {
+						acc[pos+i] = buf[i]
+					}
+					pos = pos + len(buf)
 				}
-				pos = pos + len(buf)
 
 				// @todo - make timeout match that of baudrate
 			case <-time.After(3600 * time.Microsecond):
