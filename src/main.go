@@ -3,9 +3,14 @@ package main
 import (
 	"errors"
 	"flag"
+	"fmt"
 	"log"
 	"os"
 	"time"
+)
+
+var (
+	vsn = "0.0.1-alpha"
 )
 
 type Remote interface {
@@ -23,6 +28,7 @@ type Flags struct {
 	remote    string
 	tls       bool
 	reconnect bool
+	version   bool
 }
 
 func parseFlags() Flags {
@@ -34,6 +40,7 @@ func parseFlags() Flags {
 	remoteFlag := flag.String("remote", "tcp.cloud.tiny-mesh.com:7002", "The upstream url to connect to")
 	usetlsFlag := flag.Bool("tls", true, "Controll use of TLS with --remote")
 	reconnectFlag := flag.Bool("reconnect", false, "Automatically reconnect upstream (tcp,tls) on failure")
+	versionFlag := flag.Bool("version", false, "Show version")
 
 	flag.Parse()
 
@@ -43,6 +50,7 @@ func parseFlags() Flags {
 	flags.remote = *remoteFlag
 	flags.tls = *usetlsFlag
 	flags.reconnect = *reconnectFlag
+	flags.version = *versionFlag
 
 	return *flags
 }
@@ -59,6 +67,9 @@ func main() {
 	} else if true == flags.list {
 		PrintPortList()
 		return
+	} else if true == flags.version {
+		fmt.Printf("%v\n", vsn)
+		return
 	}
 
 	path := flag.Arg(0)
@@ -71,6 +82,7 @@ func main() {
 	var downstream Remote
 	var err error
 
+	log.Printf("guri - version %v\n", vsn)
 	log.Printf("serial: opening %v\n", path)
 	downstream, err = ConnectSerial(path)
 
