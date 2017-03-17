@@ -133,7 +133,9 @@ func (remote *SerialRemote) Open() chan []byte {
 				// @todo - make timeout match that of baudrate
 			case <-time.After(3600 * time.Microsecond):
 				if pos > 0 {
-					remote.channel <- acc[:pos]
+					var buf []byte = make([]byte, pos)
+					copy(buf, acc[:pos])
+					remote.channel <- buf
 					pos = 0
 				}
 			}
