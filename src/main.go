@@ -77,6 +77,52 @@ func parseFlags() Flags {
 	return *flags
 }
 
+func verifyIDs(remote Remote, flags Flags) error {
+	_, err := remote.Write([]byte{255}, -1)
+
+	if nil != err {
+		return fmt.Errorf("failed to check config mode state: %v", err)
+	}
+
+	select {
+	case configPrompt := <-remote.Channel():
+		if configPrompt[0] == '>' {
+			// in config mode
+			return fmt.Errorf("Device in config mode... you should manually exit\n")
+		}
+		break
+
+	case <-time.After(500 * time.Millisecond):
+		break
+	}
+
+	_, err = remote.Write(GetNID([]byte{0, 0, 0, 0}), -1)
+
+	select {
+	case nidEv := <-remote.Channel():
+		ev, err := decode(nidEv)
+
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		if !flags.nid.Equal(ev.address) {
+			return fmt.Errorf("failed to verify Network ID (%v vs %v)", flags.nid.ToString(), ev.address.ToString())
+		} else if !flags.sid.Equal(ev.sid) {
+			return fmt.Errorf("failed to verify System ID (%v vs %v)", flags.sid.ToString(), ev.sid.ToString())
+		} else if !flags.uid.Equal(ev.uid) {
+			return fmt.Errorf("failed to verify Unique ID (%v vs %v)", flags.uid.ToString(), ev.uid.ToString())
+		}
+
+		break
+
+	case <-time.After(500 * time.Millisecond):
+		return fmt.Errorf("failed to request NID: ", "timeout")
+	}
+
+	return nil
+}
+
 func main() {
 
 	log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds)
@@ -114,49 +160,11 @@ func main() {
 
 	downstreamchan := downstream.Open()
 
-	// check --verify
 	if flags.verify {
-		_, err = downstream.Write([]byte{255}, -1)
+		err := verifyIDs(downstream, flags)
 
 		if nil != err {
-			log.Fatal("failed to check config mode state: ", err)
-		}
-
-		select {
-		case configPrompt := <-downstreamchan:
-			if configPrompt[0] == '>' {
-				// in config mode
-				log.Fatal("Device in config mode... you should manually exit\n")
-			}
-			break
-
-		case <-time.After(500 * time.Millisecond):
-			break
-		}
-
-		_, err = downstream.Write(GetNID([]byte{0, 0, 0, 0}), -1)
-
-		select {
-		case nidEv := <-downstreamchan:
-			ev, err := decode(nidEv)
-
-			if err != nil {
-				log.Fatal(err)
-			}
-
-			if !flags.nid.Equal(ev.address) {
-				log.Fatalf("failed to verify Network ID (%v vs %v)", flags.nid.ToString(), ev.address.ToString())
-			} else if !flags.nid.Equal(ev.address) {
-				log.Fatalf("failed to verify System ID (%v vs %v)", flags.sid.ToString(), ev.sid.ToString())
-			} else if !flags.uid.Equal(ev.uid) {
-				log.Fatalf("failed to verify Unique ID (%v vs %v)", flags.uid.ToString(), ev.uid.ToString())
-			}
-
-			break
-
-		case <-time.After(500 * time.Millisecond):
-			log.Fatal("failed to request NID: ", "timeout")
-			break
+			log.Fatal(err)
 		}
 	}
 
