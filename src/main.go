@@ -22,35 +22,57 @@ type Remote interface {
 }
 
 type Flags struct {
-	help      bool
+	help    bool
+	list    bool
+	version bool
+
+	verify bool
+	nid    Address
+	sid    Address
+	uid    Address
+
 	stdio     bool
-	list      bool
 	remote    string
 	tls       bool
 	reconnect bool
-	version   bool
 }
 
 func parseFlags() Flags {
 	flags := new(Flags)
 
-	helpFlag := flag.Bool("help", false, "Show help text")
-	stdioFlag := flag.Bool("stdio", false, "Use stdio for communication instead of remote")
+	// commands
 	listFlag := flag.Bool("list", false, "List available serialports")
+	helpFlag := flag.Bool("help", false, "Show help text")
+	versionFlag := flag.Bool("version", false, "Show version")
+
+	// link flags
+	verifyFlag := flag.Bool("verify", false, "validate IDs according to --nid, --sid, and --uid flags")
+
+	nidFlag := flag.String("nid", "::", "32bit Network ID in hexadecimal (ie, aa:bb:cc:dd)")
+	sidFlag := flag.String("sid", "::", "32bit System ID in hexadecimal (ie, aa:bb:cc:dd)")
+	uidFlag := flag.String("uid", "::", "32bit Unique ID in hexadecimal (ie, aa:bb:cc:dd)")
+
+	// communication flags
+	stdioFlag := flag.Bool("stdio", false, "Use stdio for communication instead of remote")
 	remoteFlag := flag.String("remote", "tcp.cloud.tiny-mesh.com:7002", "The upstream url to connect to")
 	usetlsFlag := flag.Bool("tls", true, "Controll use of TLS with --remote")
 	reconnectFlag := flag.Bool("reconnect", false, "Automatically reconnect upstream (tcp,tls) on failure")
-	versionFlag := flag.Bool("version", false, "Show version")
 
 	flag.Parse()
 
 	flags.help = *helpFlag
-	flags.stdio = *stdioFlag
 	flags.list = *listFlag
+	flags.version = *versionFlag
+
+	flags.verify = *verifyFlag
+	flags.nid = parseAddr(*nidFlag)
+	flags.sid = parseAddr(*sidFlag)
+	flags.uid = parseAddr(*uidFlag)
+
+	flags.stdio = *stdioFlag
 	flags.remote = *remoteFlag
 	flags.tls = *usetlsFlag
 	flags.reconnect = *reconnectFlag
-	flags.version = *versionFlag
 
 	return *flags
 }
@@ -88,6 +110,54 @@ func main() {
 
 	if nil != err {
 		log.Fatal(err)
+	}
+
+	downstreamchan := downstream.Open()
+
+	// check --verify
+	if flags.verify {
+		_, err = downstream.Write([]byte{255}, -1)
+
+		if nil != err {
+			log.Fatal("failed to check config mode state: ", err)
+		}
+
+		select {
+		case configPrompt := <-downstreamchan:
+			if configPrompt[0] == '>' {
+				// in config mode
+				log.Fatal("Device in config mode... you should manually exit\n")
+			}
+			break
+
+		case <-time.After(500 * time.Millisecond):
+			break
+		}
+
+		_, err = downstream.Write(GetNID([]byte{0, 0, 0, 0}), -1)
+
+		select {
+		case nidEv := <-downstreamchan:
+			ev, err := decode(nidEv)
+
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			if !flags.nid.Equal(ev.address) {
+				log.Fatalf("failed to verify Network ID (%v vs %v)", flags.nid.ToString(), ev.address.ToString())
+			} else if !flags.nid.Equal(ev.address) {
+				log.Fatalf("failed to verify System ID (%v vs %v)", flags.sid.ToString(), ev.sid.ToString())
+			} else if !flags.uid.Equal(ev.uid) {
+				log.Fatalf("failed to verify Unique ID (%v vs %v)", flags.uid.ToString(), ev.uid.ToString())
+			}
+
+			break
+
+		case <-time.After(500 * time.Millisecond):
+			log.Fatal("failed to request NID: ", "timeout")
+			break
+		}
 	}
 
 	connectUpstream := func() (Remote, error) {
@@ -128,7 +198,7 @@ func main() {
 
 	upstream, err = connectUpstream()
 
-	downstreamchan := downstream.Open()
+	// downstreamchan := downstream.Open()
 	upstreamchan := upstream.Open()
 
 	var maxRetries = 0
