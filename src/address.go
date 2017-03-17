@@ -20,6 +20,10 @@ func (addr Address) ToString() string {
 	return fmt.Sprintf("%02x:%02x:%02x:%02x", addr[0], addr[1], addr[2], addr[3])
 }
 
+func AddressToString(addr []byte) string {
+	return fmt.Sprintf("%02x:%02x:%02x:%02x", addr[0], addr[1], addr[2], addr[3])
+}
+
 // adapted from golang/net.parse
 func parseAddr(s string) Address {
 	addr := make(Address, AddressLength)

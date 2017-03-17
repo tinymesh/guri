@@ -66,14 +66,16 @@ func decode(buf []byte) (GenericEvent, error) {
 
 type ConfigValue []byte
 
-func RunConfigCmd(remote Remote, cmd byte) error {
+func RunConfigCmd(remote Remote, cmd byte, waitForPrompt bool) error {
 	var err error
 
 	if _, err = remote.Write([]byte{cmd}, -1); err != nil {
 		return err
 	}
 
-	_ = WaitForConfig(remote)
+	if waitForPrompt {
+		_ = WaitForConfig(remote)
+	}
 
 	return nil
 }

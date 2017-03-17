@@ -71,6 +71,16 @@ func parseFlags() Flags {
 	flags.sid = parseAddr(*sidFlag)
 	flags.uid = parseAddr(*uidFlag)
 
+	if len(flags.nid) == 0 {
+		log.Fatalf("failed to parse --nid value, value must be 4 bytes encoded as hexadecimals with : as a separator\nexample: --nid 01:02:03:04\n", flags.nid)
+	}
+	if len(flags.sid) == 0 {
+		log.Fatalf("failed to parse --sid value, value must be 4 bytes encoded as hexadecimals with : as a separator\nexample: --sid 01:02:03:04\n", flags.nid)
+	}
+	if len(flags.uid) == 0 {
+		log.Fatalf("failed to parse --uid value, value must be 4 bytes encoded as hexadecimals with : as a separator\nexample: --uid 01:02:03:04\n", flags.nid)
+	}
+
 	flags.stdio = *stdioFlag
 	flags.remote = *remoteFlag
 	flags.tls = *usetlsFlag
@@ -148,48 +158,86 @@ func configureGateway(remote Remote, flags Flags) error {
 		}
 
 		if !WaitForConfig(remote) {
-			log.Fatalf("failed to enter config mode")
+			log.Fatalf("config-mode: failed to enter config mode")
 		}
 	}
-	log.Println("config-mode: ENTER")
+	// log.Println("config-mode: ENTER")
 
-	log.Println("config-mode: CMD: set-gateway")
-	if err = RunConfigCmd(remote, 'G'); err != nil {
-		log.Fatalf("failed to enable gateway mode", err)
+	if err = RunConfigCmd(remote, '0', false); err != nil {
+		log.Fatalf("config-mode: failed to read configuration memory", err)
 	}
 
-	newCfg := []ConfigValue{
-		ConfigValue{3, 0},
-		ConfigValue{45, flags.uid[0]},
-		ConfigValue{46, flags.uid[1]},
-		ConfigValue{47, flags.uid[2]},
-		ConfigValue{48, flags.uid[3]},
-		ConfigValue{49, flags.sid[0]},
-		ConfigValue{50, flags.sid[1]},
-		ConfigValue{51, flags.sid[2]},
-		ConfigValue{52, flags.sid[3]},
+	cfg := <-remote.Channel()
+
+	if err = RunConfigCmd(remote, 'r', false); err != nil {
+		log.Fatalf("config-mode: failed to read calibration memory", err)
 	}
 
-	log.Println("config-mode: CMD: configure")
-	if err = SetConfigurationMemory(remote, newCfg); err != nil {
-		log.Fatalf("failed to set configuration memory: %v", newCfg, err)
+	calibration := <-remote.Channel()
+
+	usingProtocol := cfg[3]
+	deviceType := cfg[14]
+	uid := cfg[45:49]
+	sid := cfg[49:53]
+	nid := calibration[23:27]
+
+	log.Printf("config-mode: protocol?=%v deviceType=%v uid=%v sid=%v uid=%v",
+		usingProtocol,
+		deviceType,
+		AddressToString(uid),
+		AddressToString(sid),
+		AddressToString(nid))
+
+	if 1 != deviceType {
+		log.Println("config-mode: CMD: set-gateway")
+		if err = RunConfigCmd(remote, 'G', true); err != nil {
+			log.Fatalf("failed to enable gateway mode", err)
+		}
 	}
 
-	setNid := []ConfigValue{
-		ConfigValue{23, flags.nid[0]},
-		ConfigValue{24, flags.nid[1]},
-		ConfigValue{25, flags.nid[2]},
-		ConfigValue{26, flags.nid[3]},
+	newCfg := []ConfigValue{}
+
+	if 0 != usingProtocol {
+		newCfg = append(newCfg, ConfigValue{3, 0})
 	}
 
-	log.Println("config-mode: CMD: calibration")
-	if err = SetCalibrationMemory(remote, setNid); err != nil {
-		log.Fatalf("failed to set calibration memory: %v", setNid, err)
+	if !flags.uid.Equal(uid) {
+		newCfg = append(newCfg, ConfigValue{45, flags.uid[0]})
+		newCfg = append(newCfg, ConfigValue{46, flags.uid[1]})
+		newCfg = append(newCfg, ConfigValue{47, flags.uid[2]})
+		newCfg = append(newCfg, ConfigValue{48, flags.uid[3]})
 	}
 
-	time.Sleep(2 * time.Second)
-	log.Println("config-mode: EXIT")
-	if err = RunConfigCmd(remote, 'X'); err != nil {
+	if !flags.sid.Equal(sid) {
+		newCfg = append(newCfg, ConfigValue{49, flags.sid[0]})
+		newCfg = append(newCfg, ConfigValue{50, flags.sid[1]})
+		newCfg = append(newCfg, ConfigValue{51, flags.sid[2]})
+		newCfg = append(newCfg, ConfigValue{52, flags.sid[3]})
+	}
+
+	if len(newCfg) > 0 {
+		log.Println("config-mode: CMD: configure")
+		if err = SetConfigurationMemory(remote, newCfg); err != nil {
+			log.Fatalf("failed to set configuration memory: %v", newCfg, err)
+		}
+	}
+
+	if !flags.nid.Equal(nid) {
+		setNid := []ConfigValue{
+			ConfigValue{23, flags.nid[0]},
+			ConfigValue{24, flags.nid[1]},
+			ConfigValue{25, flags.nid[2]},
+			ConfigValue{26, flags.nid[3]},
+		}
+
+		log.Println("config-mode: CMD: calibration")
+		if err = SetCalibrationMemory(remote, setNid); err != nil {
+			log.Fatalf("failed to set calibration memory: %v", setNid, err)
+		}
+	}
+
+	// log.Println("config-mode: EXIT")
+	if err = RunConfigCmd(remote, 'X', false); err != nil {
 		log.Fatalf("failed to exit configuration mode", err)
 	}
 
@@ -241,7 +289,6 @@ func main() {
 	var err error
 
 	log.Printf("guri - version %v\n", vsn)
-	log.Printf("serial: opening %v\n", path)
 	downstream, err = ConnectSerial(path)
 
 	if nil != err {
@@ -258,8 +305,6 @@ func main() {
 		}
 	} else if flags.autoConfigure {
 		err := configureGateway(downstream, flags)
-
-		log.Fatalf("done")
 
 		if nil != err {
 			log.Fatal(err)
