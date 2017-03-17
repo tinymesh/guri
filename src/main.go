@@ -157,6 +157,8 @@ func configureGateway(remote Remote, flags Flags) error {
 			return err
 		}
 
+		log.Printf("config-mode: Press config button on device to continue")
+
 		if !WaitForConfig(remote) {
 			log.Fatalf("config-mode: failed to enter config mode")
 		}
