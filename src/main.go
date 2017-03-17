@@ -77,18 +77,18 @@ func parseFlags() Flags {
 	return *flags
 }
 
-func verifyIDs(remote Remote, flags Flags) error {
+func remoteInConfigMode(remote Remote) (bool, error) {
 	_, err := remote.Write([]byte{255}, -1)
 
 	if nil != err {
-		return fmt.Errorf("failed to check config mode state: %v", err)
+		return false, fmt.Errorf("failed to check config mode state: %v", err)
 	}
 
 	select {
 	case configPrompt := <-remote.Channel():
 		if configPrompt[0] == '>' {
 			// in config mode
-			return fmt.Errorf("Device in config mode... you should manually exit\n")
+			return true, nil
 		}
 		break
 
@@ -96,6 +96,16 @@ func verifyIDs(remote Remote, flags Flags) error {
 		break
 	}
 
+	return false, nil
+}
+
+func verifyIDs(remote Remote, flags Flags) error {
+	configMode, err := remoteInConfigMode(remote)
+	if nil != err {
+		return err
+	} else if configMode {
+		return fmt.Errorf("Device in config mode... you should manually exit\n")
+	}
 	_, err = remote.Write(GetNID([]byte{0, 0, 0, 0}), -1)
 
 	select {
