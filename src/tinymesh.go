@@ -1,11 +1,14 @@
 package main
 
-import "errors"
+import (
+	"errors"
+	"log"
+)
 
-func GetNID(addr Address) []byte {
+func GetNIDCmd(addr Address) []byte {
 	return []byte{10, 0, 0, 0, 0, 0, 3, 16, 0, 0}
 }
-func SetGwConfigMode(addr Address) []byte {
+func SetGwConfigModeCmd(addr Address) []byte {
 	return []byte{10, addr[0], addr[1], addr[2], addr[3], 0, 3, 5, 0, 0}
 }
 
@@ -59,4 +62,74 @@ func decode(buf []byte) (GenericEvent, error) {
 		hwrevision:  buf[31:33],
 		fwrevision:  buf[33:35],
 	}, nil
+}
+
+type ConfigValue []byte
+
+func RunConfigCmd(remote Remote, cmd byte) error {
+	var err error
+
+	if _, err = remote.Write([]byte{cmd}, -1); err != nil {
+		return err
+	}
+
+	_ = WaitForConfig(remote)
+
+	return nil
+}
+
+func SetConfigurationMemory(remote Remote, pairs []ConfigValue) error {
+	var err error
+
+	if _, err = remote.Write([]byte{'M'}, -1); err != nil {
+		return err
+	}
+
+	_ = WaitForConfig(remote)
+
+	log.Printf("configuration-memory: %v\n", pairs)
+
+	for _, pair := range pairs {
+		_, err := remote.Write([]byte{pair[0], pair[1]}, -1)
+
+		if err != nil {
+			return err
+		}
+	}
+
+	if _, err = remote.Write([]byte{255}, -1); err != nil {
+		return err
+	}
+
+	_ = WaitForConfig(remote)
+
+	return nil
+}
+
+func SetCalibrationMemory(remote Remote, pairs []ConfigValue) error {
+	var err error
+
+	if _, err = remote.Write([]byte{'H', 'W'}, -1); err != nil {
+		return err
+	}
+
+	_ = WaitForConfig(remote)
+
+	log.Printf("calibration-memory: %v\n", pairs)
+
+	for _, pair := range pairs {
+		_, err := remote.Write([]byte{pair[0], pair[1]}, -1)
+
+		if err != nil {
+			return err
+		}
+	}
+
+	if _, err = remote.Write([]byte{255}, -1); err != nil {
+		return err
+	}
+
+	_ = WaitForConfig(remote)
+
+	return nil
 }

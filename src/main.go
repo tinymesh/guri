@@ -26,10 +26,11 @@ type Flags struct {
 	list    bool
 	version bool
 
-	verify bool
-	nid    Address
-	sid    Address
-	uid    Address
+	verify        bool
+	nid           Address
+	sid           Address
+	uid           Address
+	autoConfigure bool
 
 	stdio     bool
 	remote    string
@@ -47,7 +48,7 @@ func parseFlags() Flags {
 
 	// link flags
 	verifyFlag := flag.Bool("verify", false, "validate IDs according to --nid, --sid, and --uid flags")
-
+	autoConfigureFlag := flag.Bool("auto-configure", false, "Automatically configure gateway operation and ID's; use --nid, --sid, and --uid flags")
 	nidFlag := flag.String("nid", "::", "32bit Network ID in hexadecimal (ie, aa:bb:cc:dd)")
 	sidFlag := flag.String("sid", "::", "32bit System ID in hexadecimal (ie, aa:bb:cc:dd)")
 	uidFlag := flag.String("uid", "::", "32bit Unique ID in hexadecimal (ie, aa:bb:cc:dd)")
@@ -65,6 +66,7 @@ func parseFlags() Flags {
 	flags.version = *versionFlag
 
 	flags.verify = *verifyFlag
+	flags.autoConfigure = *autoConfigureFlag
 	flags.nid = parseAddr(*nidFlag)
 	flags.sid = parseAddr(*sidFlag)
 	flags.uid = parseAddr(*uidFlag)
@@ -106,7 +108,7 @@ func verifyIDs(remote Remote, flags Flags) error {
 	} else if configMode {
 		return fmt.Errorf("Device in config mode... you should manually exit\n")
 	}
-	_, err = remote.Write(GetNID([]byte{0, 0, 0, 0}), -1)
+	_, err = remote.Write(GetNIDCmd([]byte{0, 0, 0, 0}), -1)
 
 	select {
 	case nidEv := <-remote.Channel():
@@ -131,6 +133,84 @@ func verifyIDs(remote Remote, flags Flags) error {
 	}
 
 	return nil
+}
+
+func configureGateway(remote Remote, flags Flags) error {
+	configMode, err := remoteInConfigMode(remote)
+
+	if nil != err {
+		return err
+	} else if !configMode {
+		_, err = remote.Write(SetGwConfigModeCmd([]byte{0, 0, 0, 0}), -1)
+
+		if nil != err {
+			return err
+		}
+
+		if !WaitForConfig(remote) {
+			log.Fatalf("failed to enter config mode")
+		}
+	}
+	log.Println("config-mode: ENTER")
+
+	log.Println("config-mode: CMD: set-gateway")
+	if err = RunConfigCmd(remote, 'G'); err != nil {
+		log.Fatalf("failed to enable gateway mode", err)
+	}
+
+	newCfg := []ConfigValue{
+		ConfigValue{3, 0},
+		ConfigValue{45, flags.uid[0]},
+		ConfigValue{46, flags.uid[1]},
+		ConfigValue{47, flags.uid[2]},
+		ConfigValue{48, flags.uid[3]},
+		ConfigValue{49, flags.sid[0]},
+		ConfigValue{50, flags.sid[1]},
+		ConfigValue{51, flags.sid[2]},
+		ConfigValue{52, flags.sid[3]},
+	}
+
+	log.Println("config-mode: CMD: configure")
+	if err = SetConfigurationMemory(remote, newCfg); err != nil {
+		log.Fatalf("failed to set configuration memory: %v", newCfg, err)
+	}
+
+	setNid := []ConfigValue{
+		ConfigValue{23, flags.nid[0]},
+		ConfigValue{24, flags.nid[1]},
+		ConfigValue{25, flags.nid[2]},
+		ConfigValue{26, flags.nid[3]},
+	}
+
+	log.Println("config-mode: CMD: calibration")
+	if err = SetCalibrationMemory(remote, setNid); err != nil {
+		log.Fatalf("failed to set calibration memory: %v", setNid, err)
+	}
+
+	time.Sleep(2 * time.Second)
+	log.Println("config-mode: EXIT")
+	if err = RunConfigCmd(remote, 'X'); err != nil {
+		log.Fatalf("failed to exit configuration mode", err)
+	}
+
+	return nil
+}
+
+func WaitForConfig(remote Remote) bool {
+	for {
+		select {
+		case prompt := <-remote.Channel():
+			if len(prompt) == 0 || prompt[0] != '>' {
+				return false
+			} else {
+				return true
+			}
+			break
+
+		case <-time.After(500 * time.Millisecond):
+			continue
+		}
+	}
 }
 
 func main() {
@@ -170,9 +250,22 @@ func main() {
 
 	downstreamchan := downstream.Open()
 
-	if flags.verify {
+	if flags.verify && !flags.autoConfigure {
 		err := verifyIDs(downstream, flags)
 
+		if nil != err {
+			log.Fatal(err)
+		}
+	} else if flags.autoConfigure {
+		err := configureGateway(downstream, flags)
+
+		log.Fatalf("done")
+
+		if nil != err {
+			log.Fatal(err)
+		}
+
+		err = verifyIDs(downstream, flags)
 		if nil != err {
 			log.Fatal(err)
 		}
