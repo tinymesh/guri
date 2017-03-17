@@ -79,11 +79,13 @@ func parseAddr(s string) Address {
 	}
 
 	n := AddressLength - i
-	for j := i - 1; j >= ellipsis; j-- {
-		addr[j+n] = addr[j]
-	}
-	for j := ellipsis + n - 1; j >= ellipsis; j-- {
-		addr[j] = 0
+	if ellipsis >= 0 {
+		for j := i - 1; j >= ellipsis; j-- {
+			addr[j+n] = addr[j]
+		}
+		for j := ellipsis + n - 1; j >= ellipsis; j-- {
+			addr[j] = 0
+		}
 	}
 
 	return addr
