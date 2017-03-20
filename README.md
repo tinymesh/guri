@@ -10,7 +10,8 @@ Currently a remote can be STDIO, TCP endpoint or TLS endpoint.
 ## Usage
 
 ```
-go run src/*.go -reconnect=true /dev/ttyUSB0
+# build your target binary
+make dist/guri-linux-amd64 && dist/guri-linux-amd64 /dev/ttyUSB0
 ```
 
 ## Building
