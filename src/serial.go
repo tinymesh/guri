@@ -7,52 +7,11 @@ import (
 	"time"
 
 	serial "go.bug.st/serial.v1"
-	"go.bug.st/serial.v1/enumerator"
 )
 
 type SerialRemote struct {
 	port    serial.Port
 	channel chan []byte
-}
-
-// func PrintPortList() {
-// 	ports, err := serial.GetPortsList()
-//
-// 	if err != nil {
-// 		fmt.Println("serial.GetPortsList")
-// 		log.Fatal(err)
-// 	}
-//
-// 	if len(ports) == 0 {
-// 		fmt.Println("No serial ports found!")
-// 	} else {
-// 		for _, port := range ports {
-// 			fmt.Printf("%v\n", port)
-// 		}
-// 	}
-// }
-
-func PrintPortList() {
-	ports, err := enumerator.GetDetailedPortsList()
-
-	if err != nil {
-		fmt.Println("enumerator.GetDetailedPortsList")
-		log.Fatal(err)
-	}
-
-	if len(ports) == 0 {
-
-	} else {
-		for _, port := range ports {
-			fmt.Printf("path=%v usb?=%v vid=%v pid=%v serial=%v\n",
-				port.Name,
-				port.IsUSB,
-				port.VID,
-				port.PID,
-				port.SerialNumber,
-			)
-		}
-	}
 }
 
 func ConnectSerial(uri string) (*SerialRemote, error) {
