@@ -57,7 +57,7 @@ func parseFlags() Flags {
 	stdioFlag := flag.Bool("stdio", false, "Use stdio for communication instead of remote")
 	remoteFlag := flag.String("remote", "tcp.cloud.tiny-mesh.com:7002", "The upstream url to connect to")
 	usetlsFlag := flag.Bool("tls", true, "Controll use of TLS with --remote")
-	reconnectFlag := flag.Bool("reconnect", false, "Automatically reconnect upstream (tcp,tls) on failure")
+	reconnectFlag := flag.Bool("reconnect", true, "Automatically re-establish communication on failure")
 
 	flag.Parse()
 
