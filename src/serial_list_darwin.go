@@ -1,4 +1,4 @@
-// +build !darwin
+// +build darwin
 
 package main
 
@@ -6,11 +6,13 @@ import (
 	"fmt"
 	"log"
 
-	"go.bug.st/serial.v1/enumerator"
+	serial "go.bug.st/serial.v1"
 )
 
+// darwin needs IOKit to get GetDetailPortsList to work (which in turn required cgo, thus no
+// cross-compiling atm)
 func PrintPortList() {
-	ports, err := enumerator.GetDetailedPortsList()
+	ports, err := serial.GetPortsList()
 
 	if err != nil {
 		fmt.Println("enumerator.GetDetailedPortsList")
@@ -22,11 +24,11 @@ func PrintPortList() {
 	} else {
 		for _, port := range ports {
 			fmt.Printf("path=%v usb?=%v vid=%v pid=%v serial=%v\n",
-				port.Name,
-				port.IsUSB,
-				port.VID,
-				port.PID,
-				port.SerialNumber,
+				port,
+				nil,
+				nil,
+				nil,
+				nil,
 			)
 		}
 	}
