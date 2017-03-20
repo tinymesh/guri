@@ -72,13 +72,13 @@ func parseFlags() Flags {
 	flags.uid = parseAddr(*uidFlag)
 
 	if len(flags.nid) == 0 {
-		log.Fatalf("failed to parse --nid value, value must be 4 bytes encoded as hexadecimals with : as a separator\nexample: --nid 01:02:03:04\n", flags.nid)
+		log.Fatalf("failed to parse --nid value, value must be 4 bytes encoded as hexadecimals with : as a separator\nexample: --nid 01:02:03:04\n")
 	}
 	if len(flags.sid) == 0 {
-		log.Fatalf("failed to parse --sid value, value must be 4 bytes encoded as hexadecimals with : as a separator\nexample: --sid 01:02:03:04\n", flags.nid)
+		log.Fatalf("failed to parse --sid value, value must be 4 bytes encoded as hexadecimals with : as a separator\nexample: --sid 01:02:03:04\n")
 	}
 	if len(flags.uid) == 0 {
-		log.Fatalf("failed to parse --uid value, value must be 4 bytes encoded as hexadecimals with : as a separator\nexample: --uid 01:02:03:04\n", flags.nid)
+		log.Fatalf("failed to parse --uid value, value must be 4 bytes encoded as hexadecimals with : as a separator\nexample: --uid 01:02:03:04\n")
 	}
 
 	flags.stdio = *stdioFlag
@@ -139,7 +139,7 @@ func verifyIDs(remote Remote, flags Flags) error {
 		break
 
 	case <-time.After(500 * time.Millisecond):
-		return fmt.Errorf("failed to request NID: ", "timeout")
+		return fmt.Errorf("failed to request NID: %s", "timeout")
 	}
 
 	return nil
@@ -166,13 +166,13 @@ func configureGateway(remote Remote, flags Flags) error {
 	// log.Println("config-mode: ENTER")
 
 	if err = RunConfigCmd(remote, '0', false); err != nil {
-		log.Fatalf("config-mode: failed to read configuration memory", err)
+		log.Fatalf("config-mode: failed to read configuration memory: %v", err)
 	}
 
 	cfg := <-remote.Channel()
 
 	if err = RunConfigCmd(remote, 'r', false); err != nil {
-		log.Fatalf("config-mode: failed to read calibration memory", err)
+		log.Fatalf("config-mode: failed to read calibration memory: %v", err)
 	}
 
 	calibration := <-remote.Channel()
@@ -193,7 +193,7 @@ func configureGateway(remote Remote, flags Flags) error {
 	if 1 != deviceType {
 		log.Println("config-mode: CMD: set-gateway")
 		if err = RunConfigCmd(remote, 'G', true); err != nil {
-			log.Fatalf("failed to enable gateway mode", err)
+			log.Fatalf("failed to enable gateway mode: %v", err)
 		}
 	}
 
@@ -220,7 +220,7 @@ func configureGateway(remote Remote, flags Flags) error {
 	if len(newCfg) > 0 {
 		log.Println("config-mode: CMD: configure")
 		if err = SetConfigurationMemory(remote, newCfg); err != nil {
-			log.Fatalf("failed to set configuration memory: %v", newCfg, err)
+			log.Fatalf("failed to set configuration memory: %v\n :: %v\n", newCfg, err)
 		}
 	}
 
@@ -234,13 +234,13 @@ func configureGateway(remote Remote, flags Flags) error {
 
 		log.Println("config-mode: CMD: calibration")
 		if err = SetCalibrationMemory(remote, setNid); err != nil {
-			log.Fatalf("failed to set calibration memory: %v", setNid, err)
+			log.Fatalf("failed to set calibration memory: %v\n :: %v\n", setNid, err)
 		}
 	}
 
 	// log.Println("config-mode: EXIT")
 	if err = RunConfigCmd(remote, 'X', false); err != nil {
-		log.Fatalf("failed to exit configuration mode", err)
+		log.Fatalf("failed to exit configuration mode: %v", err)
 	}
 
 	return nil
@@ -255,7 +255,6 @@ func WaitForConfig(remote Remote) bool {
 			} else {
 				return true
 			}
-			break
 
 		case <-time.After(500 * time.Millisecond):
 			continue

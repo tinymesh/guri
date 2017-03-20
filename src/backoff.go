@@ -47,7 +47,7 @@ func (backoff *Backoff) Until(call func() error) error {
 
 		// will fail in case maxRetries := 0 and when retries exceeds maxRetries
 		if backoff.maxRetries >= 0 && backoff.retries > backoff.maxRetries {
-			return fmt.Errorf("failed after %f (re)tries (max := %v)\n", backoff.retries, backoff.maxRetries)
+			return fmt.Errorf("failed after %v (re)tries (max := %v)\n", backoff.retries, backoff.maxRetries)
 		}
 
 		err := call()
