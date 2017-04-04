@@ -47,8 +47,8 @@ func parseFlags() Flags {
 	versionFlag := flag.Bool("version", false, "Show version")
 
 	// link flags
-	verifyFlag := flag.Bool("verify", false, "validate IDs according to --nid, --sid, and --uid flags")
-	autoConfigureFlag := flag.Bool("auto-configure", false, "Automatically configure gateway operation and ID's; use --nid, --sid, and --uid flags")
+	verifyFlag := flag.Bool("verify", false, "validate IDs according to -nid, -sid, and -uid flags")
+	autoConfigureFlag := flag.Bool("auto-configure", false, "Automatically configure gateway operation and ID's; use -nid, -sid, and -uid flags")
 	nidFlag := flag.String("nid", "::", "32bit Network ID in hexadecimal (ie, aa:bb:cc:dd)")
 	sidFlag := flag.String("sid", "::", "32bit System ID in hexadecimal (ie, aa:bb:cc:dd)")
 	uidFlag := flag.String("uid", "::", "32bit Unique ID in hexadecimal (ie, aa:bb:cc:dd)")
@@ -56,7 +56,7 @@ func parseFlags() Flags {
 	// communication flags
 	stdioFlag := flag.Bool("stdio", false, "Use stdio for communication instead of remote")
 	remoteFlag := flag.String("remote", "tcp.cloud.tiny-mesh.com:7002", "The upstream url to connect to")
-	usetlsFlag := flag.Bool("tls", true, "Controll use of TLS with --remote")
+	usetlsFlag := flag.Bool("tls", true, "Controll use of TLS with -remote")
 	reconnectFlag := flag.Bool("reconnect", true, "Automatically re-establish communication on failure")
 
 	flag.Parse()
@@ -72,13 +72,13 @@ func parseFlags() Flags {
 	flags.uid = parseAddr(*uidFlag)
 
 	if len(flags.nid) == 0 {
-		log.Fatalf("failed to parse --nid value, value must be 4 bytes encoded as hexadecimals with : as a separator\nexample: --nid 01:02:03:04\n")
+		log.Fatalf("failed to parse -nid value, value must be 4 bytes encoded as hexadecimals with : as a separator\nexample: -nid 01:02:03:04\n")
 	}
 	if len(flags.sid) == 0 {
-		log.Fatalf("failed to parse --sid value, value must be 4 bytes encoded as hexadecimals with : as a separator\nexample: --sid 01:02:03:04\n")
+		log.Fatalf("failed to parse -sid value, value must be 4 bytes encoded as hexadecimals with : as a separator\nexample: -sid 01:02:03:04\n")
 	}
 	if len(flags.uid) == 0 {
-		log.Fatalf("failed to parse --uid value, value must be 4 bytes encoded as hexadecimals with : as a separator\nexample: --uid 01:02:03:04\n")
+		log.Fatalf("failed to parse -uid value, value must be 4 bytes encoded as hexadecimals with : as a separator\nexample: -uid 01:02:03:04\n")
 	}
 
 	flags.stdio = *stdioFlag
