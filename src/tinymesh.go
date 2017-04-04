@@ -43,8 +43,8 @@ func decode(buf []byte) (GenericEvent, error) {
 	}
 
 	return GenericEvent{
-		uid:         buf[1:5],
-		sid:         buf[5:9],
+		sid:         buf[1:5],
+		uid:         buf[5:9],
 		rssi:        buf[9],
 		network_lvl: buf[10],
 		hops:        buf[11],
