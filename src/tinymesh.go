@@ -3,7 +3,12 @@ package main
 import (
 	"errors"
 	"log"
+	"time"
 )
+
+func UARTTimeout() time.Duration {
+	return 22 * time.Millisecond
+}
 
 func GetNIDCmd(addr Address) []byte {
 	return []byte{10, 0, 0, 0, 0, 0, 3, 16, 0, 0}
