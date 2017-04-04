@@ -89,7 +89,7 @@ func SetConfigurationMemory(remote Remote, pairs []ConfigValue) error {
 
 	_ = WaitForConfig(remote)
 
-	log.Printf("configuration-memory: %v\n", pairs)
+	log.Printf("tinymesh:config: %v\n", pairs)
 
 	for _, pair := range pairs {
 		_, err := remote.Write([]byte{pair[0], pair[1]}, -1)
@@ -117,7 +117,7 @@ func SetCalibrationMemory(remote Remote, pairs []ConfigValue) error {
 
 	_ = WaitForConfig(remote)
 
-	log.Printf("calibration-memory: %v\n", pairs)
+	log.Printf("tinymesh:calibration: %v\n", pairs)
 
 	for _, pair := range pairs {
 		_, err := remote.Write([]byte{pair[0], pair[1]}, -1)
