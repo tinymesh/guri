@@ -12,6 +12,8 @@ type TCPConn struct {
 }
 
 func ConnectTCP(uri string) (*TCPConn, error) {
+	log.Printf("tcp:open uri=%v\n", uri)
+
 	socket, err := net.Dial("tcp", uri)
 
 	if err != nil {

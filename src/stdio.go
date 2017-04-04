@@ -14,6 +14,7 @@ type StdioRemote struct {
 }
 
 func ConnectStdio(input io.Reader, output io.Writer) (*StdioRemote, error) {
+	log.Printf("stdio:open uri=-\n")
 	return &StdioRemote{
 		reader:  input,
 		writer:  output,

@@ -116,7 +116,7 @@ func verifyIDs(remote Remote, flags Flags) error {
 	if nil != err {
 		return err
 	} else if configMode {
-		return fmt.Errorf("Device in config mode... you should manually exit\n")
+		return fmt.Errorf("main:config: Device in config mode... you must exit manually\n")
 	}
 	_, err = remote.Write(GetNIDCmd([]byte{0, 0, 0, 0}), -1)
 
@@ -129,17 +129,17 @@ func verifyIDs(remote Remote, flags Flags) error {
 		}
 
 		if !flags.nid.Equal(ev.address) {
-			return fmt.Errorf("failed to verify Network ID (%v vs %v)", flags.nid.ToString(), ev.address.ToString())
+			return fmt.Errorf("main:config: failed to verify Network ID (%v vs %v)", flags.nid.ToString(), ev.address.ToString())
 		} else if !flags.sid.Equal(ev.sid) {
-			return fmt.Errorf("failed to verify System ID (%v vs %v)", flags.sid.ToString(), ev.sid.ToString())
+			return fmt.Errorf("main:config: failed to verify System ID (%v vs %v)", flags.sid.ToString(), ev.sid.ToString())
 		} else if !flags.uid.Equal(ev.uid) {
-			return fmt.Errorf("failed to verify Unique ID (%v vs %v)", flags.uid.ToString(), ev.uid.ToString())
+			return fmt.Errorf("main:config: failed to verify Unique ID (%v vs %v)", flags.uid.ToString(), ev.uid.ToString())
 		}
 
 		break
 
-	case <-time.After(500 * time.Millisecond):
-		return fmt.Errorf("failed to request NID: %s", "timeout")
+	case <-time.After(1000 * time.Millisecond):
+		return fmt.Errorf("main:config: failed to request NID: %s", "timeout")
 	}
 
 	return nil
@@ -157,22 +157,25 @@ func configureGateway(remote Remote, flags Flags) error {
 			return err
 		}
 
-		log.Printf("config-mode: Press config button on device to continue")
+		configMode, err := remoteInConfigMode(remote)
 
-		if !WaitForConfig(remote) {
-			log.Fatalf("config-mode: failed to enter config mode")
+		if nil != err {
+			return err
+		} else if !configMode {
+			if !WaitForConfig(remote) {
+				log.Fatalf("main:config: failed to enter config mode")
+			}
 		}
 	}
-	// log.Println("config-mode: ENTER")
 
 	if err = RunConfigCmd(remote, '0', false); err != nil {
-		log.Fatalf("config-mode: failed to read configuration memory: %v", err)
+		log.Fatalf("main:config: failed to read configuration memory: %v", err)
 	}
 
 	cfg := <-remote.Channel()
 
 	if err = RunConfigCmd(remote, 'r', false); err != nil {
-		log.Fatalf("config-mode: failed to read calibration memory: %v", err)
+		log.Fatalf("main:config: failed to read calibration memory: %v", err)
 	}
 
 	calibration := <-remote.Channel()
@@ -183,7 +186,7 @@ func configureGateway(remote Remote, flags Flags) error {
 	sid := cfg[49:53]
 	nid := calibration[23:27]
 
-	log.Printf("config-mode: protocol?=%v deviceType=%v uid=%v sid=%v uid=%v",
+	log.Printf("main:config: protocol=%v deviceType=%v uid=%v sid=%v nid=%v",
 		usingProtocol,
 		deviceType,
 		AddressToString(uid),
@@ -191,9 +194,9 @@ func configureGateway(remote Remote, flags Flags) error {
 		AddressToString(nid))
 
 	if 1 != deviceType {
-		log.Println("config-mode: CMD: set-gateway")
+		log.Println("main:config: ensure gateway operations")
 		if err = RunConfigCmd(remote, 'G', true); err != nil {
-			log.Fatalf("failed to enable gateway mode: %v", err)
+			log.Fatalf("main:config: failed to enable gateway mode: %v", err)
 		}
 	}
 
@@ -218,9 +221,9 @@ func configureGateway(remote Remote, flags Flags) error {
 	}
 
 	if len(newCfg) > 0 {
-		log.Println("config-mode: CMD: configure")
+		log.Println("main:config: set configuration")
 		if err = SetConfigurationMemory(remote, newCfg); err != nil {
-			log.Fatalf("failed to set configuration memory: %v\n :: %v\n", newCfg, err)
+			log.Fatalf("main:config:failed to set configuration memory: %v\n :: %v\n", newCfg, err)
 		}
 	}
 
@@ -232,15 +235,15 @@ func configureGateway(remote Remote, flags Flags) error {
 			ConfigValue{26, flags.nid[3]},
 		}
 
-		log.Println("config-mode: CMD: calibration")
+		log.Println("main:config: CMD: calibration")
 		if err = SetCalibrationMemory(remote, setNid); err != nil {
-			log.Fatalf("failed to set calibration memory: %v\n :: %v\n", setNid, err)
+			log.Fatalf("main:config:failed to set calibration memory: %v\n :: %v\n", setNid, err)
 		}
 	}
 
 	// log.Println("config-mode: EXIT")
 	if err = RunConfigCmd(remote, 'X', false); err != nil {
-		log.Fatalf("failed to exit configuration mode: %v", err)
+		log.Fatalf("main:config: failed to exit configuration mode: %v", err)
 	}
 
 	return nil
@@ -320,7 +323,6 @@ func main() {
 	connectUpstream := func() (Remote, error) {
 
 		if true == flags.stdio {
-			log.Printf("remote: using stdio")
 			upstream, err = ConnectStdio(os.Stdin, os.Stdout)
 
 			if nil != err {
@@ -328,7 +330,6 @@ func main() {
 			}
 		} else if true == flags.tls {
 			// setup remote TLS communication
-			log.Printf("remote: using TCP w/TLS")
 			upstream, err = ConnectTLS(flags.remote)
 
 			if nil != err {
@@ -337,7 +338,6 @@ func main() {
 			}
 		} else {
 			// setup remote TCP communication without TLS
-			log.Printf("remote: using TCP (NO-TLS)")
 			upstream, err = ConnectTCP(flags.remote)
 
 			if nil != err {

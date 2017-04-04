@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"time"
 )
 
@@ -28,8 +27,6 @@ func NewBackoff(initialTime time.Duration, stepValue float64, maxRetries int) Ba
 	} else {
 		maxTime = time.Duration(float64(initialTime) * (float64(maxRetries) * 100 * stepValue))
 	}
-
-	log.Printf("maxTime: %v, maxTries: %v\n", maxTime, maxRetries)
 
 	return Backoff{
 		initialTime: initialTime,

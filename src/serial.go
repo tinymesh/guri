@@ -15,7 +15,7 @@ type SerialRemote struct {
 }
 
 func ConnectSerial(uri string) (*SerialRemote, error) {
-	log.Printf("serial:open %v\n", uri)
+	log.Printf("serial:open uri=%v\n", uri)
 	port, err := serial.Open(uri, &serial.Mode{})
 
 	if nil != err {

@@ -13,6 +13,8 @@ type TLSConn struct {
 }
 
 func ConnectTLS(uri string) (*TLSConn, error) {
+	log.Printf("tls:open uri=%v (SSL/TLS)\n", uri)
+
 	parts := strings.Split(uri, ":")
 	socket, err := tls.Dial("tcp", uri, &tls.Config{
 		ServerName: parts[0],
