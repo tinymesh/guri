@@ -10,7 +10,7 @@ import (
 )
 
 var (
-	vsn = "0.0.1-rc2"
+	vsn = "0.0.1-rc3"
 )
 
 type Remote interface {
