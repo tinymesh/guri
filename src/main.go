@@ -15,10 +15,10 @@ var (
 
 type Remote interface {
 	Channel() chan []byte
+	Close() error
+	Connect() error
 	Recv(timeout time.Duration) ([]byte, error)
 	Write(buf []byte, timeout time.Duration) (int, error)
-	Open() chan []byte
-	Close() error
 }
 
 type Flags struct {
@@ -89,6 +89,106 @@ func parseFlags() Flags {
 	return *flags
 }
 
+func pickUpstream(flags Flags) (Remote, error) {
+	if true == flags.stdio {
+		// stdio
+		return ConnectStdio(os.Stdin, os.Stdout)
+	} else if true == flags.tls {
+		// tls
+		return ConnectTLS(flags.remote)
+	}
+
+	return ConnectTCP(flags.remote)
+}
+
+func forward(remote Remote, t time.Duration) chan []byte {
+	ch := make(chan []byte, 256)
+
+	go func() {
+		for {
+			buf, err := remote.Recv(t)
+
+			if nil != err {
+				log.Printf("forward-err: %v\n", err)
+				close(ch)
+				return
+			}
+
+			ch <- buf
+		}
+	}()
+
+	return ch
+}
+
+func loop(from Remote, to Remote, flags Flags) {
+	upstream := forward(from, 500*time.Millisecond)
+	downstream := forward(to, 2*time.Millisecond)
+
+	upoff := &Backoff{
+		initial: 1 * time.Second,
+		wait:    1 * time.Second,
+		delay:   2.5,
+		max:     5 * time.Minute,
+	}
+
+	downoff := &Backoff{
+		initial: 1 * time.Second,
+		wait:    1 * time.Second,
+		delay:   2.5,
+		max:     5 * time.Minute,
+	}
+
+	for {
+		select {
+		case buf, state := <-upstream:
+			if false == state {
+				if !flags.reconnect {
+					log.Fatalf("upstream:close, exiting")
+				}
+
+				log.Printf("upstream:close, reconnecting\n")
+				from.Close()
+				if err := from.Connect(); nil != err {
+					log.Printf("upstream:open: %v\n", err)
+					upoff.Fail()
+				} else {
+					upoff.Success()
+					upstream = forward(from, 500*time.Millisecond)
+				}
+			} else if len(buf) > 0 {
+				log.Printf("upstream:recv[%v] %v\n", state, buf)
+				if len(buf) > 10 && 6 == buf[0] {
+					to.Write(buf[:1], -1)
+					to.Write(buf[1:], -1)
+				} else {
+					to.Write(buf, -1)
+				}
+			}
+
+		case buf, state := <-downstream:
+			if false == state {
+				if !flags.reconnect {
+					log.Fatalf("upstream:close, exiting")
+				}
+
+				to.Close()
+				log.Printf("downstream:close, reconnecting\n")
+				if err := to.Connect(); nil != err {
+					log.Printf("downstream:open: %v\n", err)
+					downoff.Fail()
+				} else {
+					downoff.Success()
+					downstream = forward(to, 2*time.Millisecond)
+				}
+			} else if len(buf) > 0 {
+				log.Printf("downstream:recv[%v] %v\n", state, buf)
+				from.Write(buf, -1)
+			}
+		}
+	}
+}
+
 func main() {
 
 	log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds)
@@ -117,136 +217,14 @@ func main() {
 	var err error
 
 	log.Printf("guri - version %v\n", vsn)
-	downstream, err = ConnectSerial(path)
 
-	if nil != err {
+	if downstream, err = ConnectSerial(path, flags); nil != err {
 		log.Fatal(err)
 	}
 
-	downstreamchan := downstream.Open()
-
-	if flags.verify && !flags.autoConfigure {
-		err := verifyIDs(downstream, flags)
-
-		if nil != err {
-			log.Fatal(err)
-		}
-	} else if flags.autoConfigure {
-		err := configureGateway(downstream, flags)
-
-		if nil != err {
-			log.Fatal(err)
-		}
-
-		err = verifyIDs(downstream, flags)
-		if nil != err {
-			log.Fatal(err)
-		}
-	}
-
-	connectUpstream := func() (Remote, error) {
-
-		if true == flags.stdio {
-			upstream, err = ConnectStdio(os.Stdin, os.Stdout)
-
-			if nil != err {
-				log.Fatalf("error[stdio] %v\n", err)
-			}
-		} else if true == flags.tls {
-			// setup remote TLS communication
-			upstream, err = ConnectTLS(flags.remote)
-
-			if nil != err {
-				log.Printf("error[tcp/tls] %v\n", err)
-				return nil, err
-			}
-		} else {
-			// setup remote TCP communication without TLS
-			upstream, err = ConnectTCP(flags.remote)
-
-			if nil != err {
-				log.Printf("error[tcp] %v\n", err)
-				return nil, err
-			}
-		}
-
-		if nil == upstream {
-			return nil, errors.New("no upstream configured")
-		}
-
-		return upstream, nil
-	}
-
-	upstream, err = connectUpstream()
-
-	// downstreamchan := downstream.Open()
-	upstreamchan := upstream.Open()
-
-	var maxRetries = 0
-
-	if true == flags.reconnect {
-		maxRetries = -1
-	}
-
-	var upstreamBackoff Backoff = NewBackoff(time.Second, 2.0, maxRetries)
-	var downstreamBackoff Backoff = NewBackoff(time.Second, 2.0, maxRetries)
-
-	log.Printf("guri - initialized\n")
-
-	for {
-		select {
-		case buf, state := <-downstreamchan:
-			if false == state {
-				if true == flags.reconnect {
-					log.Printf("downstream:close, reconnecting\n")
-					downstreamBackoff.Until(func() error {
-						downstream, err = ConnectSerial(path)
-						if nil != err {
-							log.Printf("error[downstream:connect] %v\n", err)
-						} else {
-							log.Printf("downstream:connect reconnected\n")
-						}
-						return err
-					})
-
-					downstreamchan = downstream.Open()
-				} else {
-					log.Printf("downstream:close, terminating\n")
-					return
-				}
-			} else {
-				log.Printf("downstream:recv[%v] %v\n", state, buf)
-				upstream.Write(buf, -1)
-			}
-
-		case buf, state := <-upstreamchan:
-			if false == state {
-				if true == flags.reconnect {
-					log.Printf("upstream:close, reconnecting\n")
-					upstreamBackoff.Until(func() error {
-						upstream, err = connectUpstream()
-						if nil != err {
-							log.Printf("error[upstream:connect] %v\n", err)
-						} else {
-							log.Printf("upstream:connect reconnect\n")
-						}
-						return err
-					})
-
-					upstreamchan = upstream.Open()
-				} else {
-					log.Printf("upstream:close, terminating\n")
-					return
-				}
-
-			} else {
-				log.Printf("upstream:recv[%v] %v\n", state, buf)
-				if true == flags.stdio && buf[0] == 10 {
-					downstream.Write([]byte("\x0a\x00\x00\x00\x00\x03\x03\x10\x00\x00"), -1)
-				}
-
-				downstream.Write(buf, -1)
-			}
-		}
+	if upstream, err = pickUpstream(flags); nil != err {
+		log.Fatalf("failed to connect to upstream; %v\n", err)
+	} else {
+		loop(upstream, downstream, flags)
 	}
 }

@@ -1,74 +1,91 @@
 package main
 
 import (
+	"errors"
 	"log"
 	"net"
 	"time"
 )
 
 type TCPConn struct {
+	uri     string
 	socket  net.Conn
 	channel chan []byte
 }
 
 func ConnectTCP(uri string) (*TCPConn, error) {
-	log.Printf("tcp:open uri=%v\n", uri)
+	remote := &TCPConn{
+		uri: uri,
+	}
 
-	socket, err := net.Dial("tcp", uri)
-
-	if err != nil {
+	if err := remote.Connect(); nil != err {
 		return nil, err
 	}
 
-	return &TCPConn{
-		socket:  socket,
-		channel: make(chan []byte, 256),
-	}, nil
+	return remote, nil
+}
+
+func (conn *TCPConn) Connect() error {
+	log.Printf("tcp:open uri=%v\n", conn.uri)
+
+	socket, err := net.Dial("tcp", conn.uri)
+
+	if err != nil {
+		return err
+	}
+
+	conn.socket = socket
+	conn.channel = make(chan []byte, 256)
+
+	go func() {
+		defer func() {
+			if err := recover(); nil != err {
+				log.Printf("error[serial] - %v", err)
+			}
+		}()
+
+		buf := make([]byte, 256)
+
+		for {
+			n, err := conn.socket.Read(buf)
+
+			if nil != err {
+				log.Printf("error[tcp:recv] %v\n", err)
+				conn.channel <- []byte("")
+				close(conn.channel)
+				return
+			} else {
+				conn.channel <- buf[:n]
+			}
+		}
+	}()
+
+	return nil
 }
 
 func (conn *TCPConn) Channel() chan []byte {
 	return conn.channel
 }
 
-func (conn *TCPConn) Open() chan []byte {
-	go func() {
-
-		defer func() {
-			if r := recover(); r != nil {
-				log.Println("error[tcp:close]:", r)
-			}
-		}()
-
-		for {
-			buf, err := conn.Recv(-1)
-
-			if nil != err {
-				close(conn.channel)
-			} else {
-				conn.channel <- buf
-			}
-		}
-	}()
-
-	return conn.Channel()
-}
-
 func (conn *TCPConn) Close() error {
 	return conn.socket.Close()
 }
 
-func (conn *TCPConn) Recv(timeout time.Duration) ([]byte, error) {
-	buf := make([]byte, 256)
-	n, err := conn.socket.Read(buf)
+func (conn *TCPConn) Recv(t time.Duration) ([]byte, error) {
+	select {
+	case buf := <-conn.channel:
+		if 0 == len(buf) {
+			return nil, errors.New("EOF")
+		}
 
-	if nil != err {
-		log.Printf("error[tcp:recv] %v\n", err)
-		return nil, err
+		return buf, nil
+
+	case <-time.After(t):
+		return []byte(""), nil
 	}
-
-	return buf[:n], nil
 }
 
 func (conn *TCPConn) Write(buf []byte, timeout time.Duration) (int, error) {
+	log.Printf("tcp:write[%v] %v\n", len(buf), buf)
 	return conn.socket.Write(buf)
 }

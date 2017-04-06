@@ -2,7 +2,6 @@ package main
 
 import (
 	"errors"
-	"fmt"
 	"log"
 	"time"
 
@@ -10,16 +9,37 @@ import (
 )
 
 type SerialRemote struct {
-	port    serial.Port
+	uri   string
+	flags Flags
+	port  serial.Port
+	// data channel
 	channel chan []byte
+	// done channel, send something to close it
+	done chan struct{}
 }
 
-func ConnectSerial(uri string) (*SerialRemote, error) {
-	log.Printf("serial:open uri=%v\n", uri)
-	port, err := serial.Open(uri, &serial.Mode{})
+func ConnectSerial(uri string, flags Flags) (*SerialRemote, error) {
+	remote := &SerialRemote{
+		uri:   uri,
+		flags: flags,
+	}
+
+	err := remote.Connect()
 
 	if nil != err {
 		return nil, err
+	}
+
+	return remote, nil
+}
+
+func (remote *SerialRemote) Connect() error {
+	log.Printf("serial:open uri=%v\n", remote.uri)
+
+	port, err := serial.Open(remote.uri, &serial.Mode{})
+
+	if nil != err {
+		return err
 	}
 
 	mode := &serial.Mode{
@@ -30,78 +50,65 @@ func ConnectSerial(uri string) (*SerialRemote, error) {
 	}
 
 	if err := port.SetMode(mode); err != nil {
-		return nil, err
+		return err
 	}
 
-	return &SerialRemote{
-		port:    port,
-		channel: make(chan []byte, 256),
-	}, nil
+	remote.port = port
+	remote.done = make(chan struct{}, 2)
+	remote.channel = make(chan []byte, 256)
+
+	go remote.ioloop()
+
+	if true == remote.flags.autoConfigure {
+		// configureGateway this, flags
+		if err := ensureTinyMeshConfig(remote, remote.flags); nil != err {
+			return err
+		}
+	} else if true == remote.flags.verify {
+		if err := verifyTinyMeshConfig(remote, remote.flags); nil != err {
+			return err
+		}
+	}
+
+	return nil
 }
 
-func (remote *SerialRemote) Open() chan []byte {
-	go func() {
-		acc := make([]byte, 256)
-		var pos int = 0
+func (remote *SerialRemote) SetState(state bool) error {
+	return remote.port.SetRTS(state)
+}
 
-		// remote.channel <- acc[:pos]
-		reader := make(chan []byte)
-
-		go func() {
-			for {
-				buf, err := remote.Recv(-1)
-
-				if nil != err {
-					log.Printf("error[serial:recv]: %v\n", err)
-					close(reader)
-					return
-				} else if 0 == len(buf) {
-					log.Printf("error[serial:recv]#EOF: %v\n", fmt.Errorf("EOF"))
-					close(reader)
-					return
-				}
-
-				reader <- buf
-			}
-		}()
-
+func (remote *SerialRemote) ioloop() {
+	defer func() {
 		defer func() {
-			if r := recover(); r != nil {
-				log.Println("error[serial:close]:", r)
+			if err := recover(); nil != err {
+				log.Printf("error[serial] - %v", err)
 			}
 		}()
 
-		for {
-			select {
-			case buf, state := <-reader:
-				if false == state {
-					err := remote.Close()
-
-					if nil != err {
-						log.Printf("error[serial:close]: failed to close: %v\n", err)
-					}
-
-					close(remote.channel)
-				} else {
-					for i := 0; i < len(buf); i++ {
-						acc[pos+i] = buf[i]
-					}
-					pos = pos + len(buf)
-				}
-
-				// @todo - make timeout match that of baudrate
-			case <-time.After(3600 * time.Microsecond):
-				if pos > 0 {
-					var buf []byte = make([]byte, pos)
-					copy(buf, acc[:pos])
-					remote.channel <- buf
-					pos = 0
-				}
-			}
-		}
+		close(remote.done)
 	}()
 
-	return remote.channel
+	for {
+		buf := make([]byte, 256)
+		bytes, err := remote.port.Read(buf)
+
+		if nil != err {
+			log.Printf("serial:err - failed to read port %v\n", err)
+			remote.channel <- []byte("")
+			return
+		} else if 0 == bytes {
+			remote.channel <- []byte("")
+			return
+		}
+
+		select {
+		case remote.channel <- buf[:bytes]:
+			break
+		case <-remote.done:
+			remote.channel <- []byte("")
+			return
+		}
+	}
 }
 
 func (remote *SerialRemote) Channel() chan []byte {
@@ -112,19 +119,37 @@ func (remote *SerialRemote) Close() error {
 	return remote.port.Close()
 }
 
-func (remote *SerialRemote) Recv(timeout time.Duration) ([]byte, error) {
-	buf := make([]byte, 256)
-	n, err := remote.port.Read(buf)
+func (remote *SerialRemote) Recv(t time.Duration) ([]byte, error) {
+	acc := make([]byte, 256)
+	pos := 0
 
-	if err != nil {
-		return nil, err
-	} else if 0 == n {
-		return nil, errors.New("EOF")
+	for {
+		select {
+		case buf := <-remote.channel:
+			if 0 == len(buf) {
+				return nil, errors.New("EOF")
+			}
+
+			for i := 0; i < len(buf); i++ {
+				acc[pos+i] = buf[i]
+			}
+
+			pos = pos + len(buf)
+
+		case <-time.After(t):
+			if 0 == pos {
+				return []byte(""), nil
+			}
+
+			return acc[:pos], nil
+		}
 	}
-	//log.Printf("serial:recv %v\n", buf[:n])
-	return buf[:n], nil
 }
 
 func (remote *SerialRemote) Write(buf []byte, timeout time.Duration) (int, error) {
-	return remote.port.Write(buf)
+	log.Printf("serial:write[%v]: %v\n", len(buf), buf)
+	bytes, err := remote.port.Write(buf)
+	time.Sleep(UARTTimeout() * 2)
+
+	return bytes, err
 }
