@@ -47,7 +47,7 @@ func parseFlags() Flags {
 	versionFlag := flag.Bool("version", false, "Show version")
 
 	// link flags
-	verifyFlag := flag.Bool("verify", false, "validate IDs according to -nid, -sid, and -uid flags")
+	verifyFlag := flag.Bool("verify", true, "validate IDs according to -nid, -sid, and -uid flags")
 	autoConfigureFlag := flag.Bool("auto-configure", false, "Automatically configure gateway operation and ID's; use -nid, -sid, and -uid flags")
 	nidFlag := flag.String("nid", "::", "32bit Network ID in hexadecimal (ie, aa:bb:cc:dd)")
 	sidFlag := flag.String("sid", "::", "32bit System ID in hexadecimal (ie, aa:bb:cc:dd)")
