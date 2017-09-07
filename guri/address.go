@@ -1,31 +1,37 @@
-package main
+package guri
 
 import (
 	"bytes"
 	"fmt"
 )
 
+// Address Generic type for addresses
 type Address []byte
 
+// AddressLength maximum Address Length for generic Tinymesh addrs
 const AddressLength = 4
 
-func (address Address) Equal(match Address) bool {
-	if bytes.Equal(address, []byte{0, 0, 0, 0}) {
+// Equal check if address is ::0 or perform equality check on `match := address`
+func (addr Address) Equal(match Address) bool {
+	if bytes.Equal(addr, []byte{0, 0, 0, 0}) {
 		return true
 	}
-	return bytes.Equal(address, match)
+	return bytes.Equal(addr, match)
 }
 
+// ToString "pretty" format of addr string
 func (addr Address) ToString() string {
 	return fmt.Sprintf("%02x:%02x:%02x:%02x", addr[0], addr[1], addr[2], addr[3])
 }
 
+// AddressToString []byte as address
 func AddressToString(addr []byte) string {
 	return fmt.Sprintf("%02x:%02x:%02x:%02x", addr[0], addr[1], addr[2], addr[3])
 }
 
+// ParseAddr parse a ipv6 like address
 // adapted from golang/net.parse
-func parseAddr(s string) Address {
+func ParseAddr(s string) Address {
 	addr := make(Address, AddressLength)
 	ellipsis := -1 // position of ellipsis in ip
 
@@ -50,7 +56,7 @@ func parseAddr(s string) Address {
 
 		// Save this byte
 		addr[i] = byte(n)
-		i += 1
+		i++
 
 		// Stop at end of string.
 		s = s[c:]

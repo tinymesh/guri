@@ -1,4 +1,4 @@
-package main
+package guri
 
 import (
 	"errors"
@@ -7,12 +7,14 @@ import (
 	"time"
 )
 
+// TCPConn remote tcp endpoint config
 type TCPConn struct {
 	uri     string
 	socket  net.Conn
 	channel chan []byte
 }
 
+// ConnectTCP connect to plain TCP endpoint
 func ConnectTCP(uri string) (*TCPConn, error) {
 	remote := &TCPConn{
 		uri: uri,
@@ -25,6 +27,7 @@ func ConnectTCP(uri string) (*TCPConn, error) {
 	return remote, nil
 }
 
+// Connect dial into tcp endpoint
 func (conn *TCPConn) Connect() error {
 	log.Printf("tcp:open uri=%v\n", conn.uri)
 
@@ -53,7 +56,6 @@ func (conn *TCPConn) Connect() error {
 				log.Printf("error[tcp:recv] %v\n", err)
 				conn.channel <- []byte("")
 				close(conn.channel)
-				return
 			} else {
 				conn.channel <- buf[:n]
 			}
@@ -63,14 +65,17 @@ func (conn *TCPConn) Connect() error {
 	return nil
 }
 
+// Channel return TCP channel
 func (conn *TCPConn) Channel() chan []byte {
 	return conn.channel
 }
 
+// Close close TCP channel
 func (conn *TCPConn) Close() error {
 	return conn.socket.Close()
 }
 
+// Recv attempt to receive maximum amount of bytes within duration `t`
 func (conn *TCPConn) Recv(t time.Duration) ([]byte, error) {
 	select {
 	case buf := <-conn.channel:
@@ -85,6 +90,7 @@ func (conn *TCPConn) Recv(t time.Duration) ([]byte, error) {
 	}
 }
 
+// Write write data to TCP socket
 func (conn *TCPConn) Write(buf []byte, timeout time.Duration) (int, error) {
 	log.Printf("tcp:write[%v] %v\n", len(buf), buf)
 	return conn.socket.Write(buf)

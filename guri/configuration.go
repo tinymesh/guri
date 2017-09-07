@@ -1,4 +1,4 @@
-package main
+package guri
 
 import (
 	"fmt"
@@ -33,9 +33,10 @@ func verifyIDs(remote Remote, flags Flags) error {
 	if nil != err {
 		return err
 	} else if configMode {
-		return fmt.Errorf("main:config: Device in config mode... you must exit manually\n")
+		return fmt.Errorf("main:config: Device in config mode... you must exit manually")
 	}
-	_, err = remote.Write(GetNIDCmd([]byte{0, 0, 0, 0}), -1)
+
+	_, _ = remote.Write(GetNIDCmd([]byte{0, 0, 0, 0}), -1)
 
 	select {
 	case nidEv := <-remote.Channel():
@@ -45,12 +46,12 @@ func verifyIDs(remote Remote, flags Flags) error {
 			log.Fatal(err)
 		}
 
-		if !flags.nid.Equal(ev.address) {
-			return fmt.Errorf("main:config: failed to verify Network ID (%v vs %v)", flags.nid.ToString(), ev.address.ToString())
-		} else if !flags.sid.Equal(ev.sid) {
-			return fmt.Errorf("main:config: failed to verify System ID (%v vs %v)", flags.sid.ToString(), ev.sid.ToString())
-		} else if !flags.uid.Equal(ev.uid) {
-			return fmt.Errorf("main:config: failed to verify Unique ID (%v vs %v)", flags.uid.ToString(), ev.uid.ToString())
+		if !flags.NID.Equal(ev.address) {
+			return fmt.Errorf("main:config: failed to verify Network ID (%v vs %v)", flags.NID.ToString(), ev.address.ToString())
+		} else if !flags.SID.Equal(ev.sid) {
+			return fmt.Errorf("main:config: failed to verify System ID (%v vs %v)", flags.SID.ToString(), ev.sid.ToString())
+		} else if !flags.UID.Equal(ev.uid) {
+			return fmt.Errorf("main:config: failed to verify Unique ID (%v vs %v)", flags.UID.ToString(), ev.uid.ToString())
 		}
 
 		break
@@ -74,7 +75,7 @@ func configureGateway(remote Remote, flags Flags) error {
 			return err
 		}
 
-		configMode, err := remoteInConfigMode(remote)
+		configMode, err = remoteInConfigMode(remote)
 
 		if nil != err {
 			return err
@@ -123,18 +124,18 @@ func configureGateway(remote Remote, flags Flags) error {
 		newCfg = append(newCfg, ConfigValue{3, 0})
 	}
 
-	if !flags.uid.Equal(uid) {
-		newCfg = append(newCfg, ConfigValue{45, flags.uid[0]})
-		newCfg = append(newCfg, ConfigValue{46, flags.uid[1]})
-		newCfg = append(newCfg, ConfigValue{47, flags.uid[2]})
-		newCfg = append(newCfg, ConfigValue{48, flags.uid[3]})
+	if !flags.UID.Equal(uid) {
+		newCfg = append(newCfg, ConfigValue{45, flags.UID[0]})
+		newCfg = append(newCfg, ConfigValue{46, flags.UID[1]})
+		newCfg = append(newCfg, ConfigValue{47, flags.UID[2]})
+		newCfg = append(newCfg, ConfigValue{48, flags.UID[3]})
 	}
 
-	if !flags.sid.Equal(sid) {
-		newCfg = append(newCfg, ConfigValue{49, flags.sid[0]})
-		newCfg = append(newCfg, ConfigValue{50, flags.sid[1]})
-		newCfg = append(newCfg, ConfigValue{51, flags.sid[2]})
-		newCfg = append(newCfg, ConfigValue{52, flags.sid[3]})
+	if !flags.SID.Equal(sid) {
+		newCfg = append(newCfg, ConfigValue{49, flags.SID[0]})
+		newCfg = append(newCfg, ConfigValue{50, flags.SID[1]})
+		newCfg = append(newCfg, ConfigValue{51, flags.SID[2]})
+		newCfg = append(newCfg, ConfigValue{52, flags.SID[3]})
 	}
 
 	if len(newCfg) > 0 {
@@ -144,17 +145,17 @@ func configureGateway(remote Remote, flags Flags) error {
 		}
 	}
 
-	if !flags.nid.Equal(nid) {
-		setNid := []ConfigValue{
-			ConfigValue{23, flags.nid[0]},
-			ConfigValue{24, flags.nid[1]},
-			ConfigValue{25, flags.nid[2]},
-			ConfigValue{26, flags.nid[3]},
+	if !flags.NID.Equal(nid) {
+		setNID := []ConfigValue{
+			ConfigValue{23, flags.NID[0]},
+			ConfigValue{24, flags.NID[1]},
+			ConfigValue{25, flags.NID[2]},
+			ConfigValue{26, flags.NID[3]},
 		}
 
 		log.Println("main:config: set calibration")
-		if err = SetCalibrationMemory(remote, setNid); err != nil {
-			log.Fatalf("main:config:failed to set calibration memory: %v\n :: %v\n", setNid, err)
+		if err = SetCalibrationMemory(remote, setNID); err != nil {
+			log.Fatalf("main:config:failed to set calibration memory: %v\n :: %v\n", setNID, err)
 		}
 	}
 
@@ -166,15 +167,16 @@ func configureGateway(remote Remote, flags Flags) error {
 	return nil
 }
 
+// WaitForConfig attempt to put `remote` in configuration mode
 func WaitForConfig(remote Remote) bool {
 	for {
 		select {
 		case prompt := <-remote.Channel():
 			if len(prompt) == 0 || prompt[0] != '>' {
 				return false
-			} else {
-				return true
 			}
+
+			return true
 
 		case <-time.After(500 * time.Millisecond):
 			continue

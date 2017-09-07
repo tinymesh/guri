@@ -1,4 +1,4 @@
-package main
+package guri
 
 import (
 	"errors"
@@ -8,6 +8,7 @@ import (
 	serial "go.bug.st/serial.v1"
 )
 
+// SerialRemote channel def for serailport
 type SerialRemote struct {
 	uri   string
 	flags Flags
@@ -18,6 +19,7 @@ type SerialRemote struct {
 	done chan struct{}
 }
 
+// ConnectSerial connect to a serial device
 func ConnectSerial(uri string, flags Flags) (*SerialRemote, error) {
 	remote := &SerialRemote{
 		uri:   uri,
@@ -33,6 +35,7 @@ func ConnectSerial(uri string, flags Flags) (*SerialRemote, error) {
 	return remote, nil
 }
 
+// Connect dial into serial device
 func (remote *SerialRemote) Connect() error {
 	log.Printf("serial:open uri=%v\n", remote.uri)
 
@@ -59,12 +62,12 @@ func (remote *SerialRemote) Connect() error {
 
 	go remote.ioloop()
 
-	if true == remote.flags.autoConfigure {
+	if true == remote.flags.AutoConfigure {
 		// configureGateway this, flags
 		if err := ensureTinyMeshConfig(remote, remote.flags); nil != err {
 			return err
 		}
-	} else if true == remote.flags.verify {
+	} else if true == remote.flags.Verify {
 		if err := verifyTinyMeshConfig(remote, remote.flags); nil != err {
 			return err
 		}
@@ -73,6 +76,7 @@ func (remote *SerialRemote) Connect() error {
 	return nil
 }
 
+// SetState SetRTS state to `state`
 func (remote *SerialRemote) SetState(state bool) error {
 	return remote.port.SetRTS(state)
 }
@@ -111,14 +115,17 @@ func (remote *SerialRemote) ioloop() {
 	}
 }
 
+// Channel return the serial channel
 func (remote *SerialRemote) Channel() chan []byte {
 	return remote.channel
 }
 
+// Close close the serial channel
 func (remote *SerialRemote) Close() error {
 	return remote.port.Close()
 }
 
+// Recv attempt to receive maximum amount of bytes within duration `t`
 func (remote *SerialRemote) Recv(t time.Duration) ([]byte, error) {
 	acc := make([]byte, 256)
 	pos := 0

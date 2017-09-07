@@ -1,4 +1,4 @@
-package main
+package guri
 
 import (
 	"crypto/tls"
@@ -8,12 +8,14 @@ import (
 	"time"
 )
 
+// TLSConn information about TLS endpoint
 type TLSConn struct {
 	uri     string
 	socket  tls.Conn
 	channel chan []byte
 }
 
+// ConnectTLS connect to a TLS enabled enpoint
 func ConnectTLS(uri string) (*TLSConn, error) {
 	remote := &TLSConn{
 		uri: uri,
@@ -26,6 +28,7 @@ func ConnectTLS(uri string) (*TLSConn, error) {
 	return remote, nil
 }
 
+// Connect tls dialing
 func (conn *TLSConn) Connect() error {
 	log.Printf("tls:open uri=%v (SSL/TLS)\n", conn.uri)
 
@@ -57,7 +60,6 @@ func (conn *TLSConn) Connect() error {
 				log.Printf("error[tcp/tls:recv] %v\n", err)
 				conn.channel <- []byte("")
 				close(conn.channel)
-				return
 			} else {
 				conn.channel <- buf[:n]
 			}
@@ -67,14 +69,17 @@ func (conn *TLSConn) Connect() error {
 	return nil
 }
 
+// Channel return the TLS channel
 func (conn *TLSConn) Channel() chan []byte {
 	return conn.channel
 }
 
+// Close close TLS channel
 func (conn *TLSConn) Close() error {
 	return conn.socket.Close()
 }
 
+// Recv attempt to receive maximum amount of bytes within duration `t`
 func (conn *TLSConn) Recv(t time.Duration) ([]byte, error) {
 	select {
 	case buf := <-conn.channel:

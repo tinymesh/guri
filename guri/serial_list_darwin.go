@@ -1,6 +1,6 @@
 // +build darwin
 
-package main
+package guri
 
 import (
 	"fmt"

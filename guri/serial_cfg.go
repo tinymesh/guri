@@ -1,4 +1,4 @@
-package main
+package guri
 
 import (
 	"fmt"
@@ -26,11 +26,12 @@ func inTinyMeshConfig(remote *SerialRemote) (bool, error) {
 	if nil == buf {
 		// if we can't get a response, assume we are in config and do nothing
 		return true, err
-	} else {
-		return len(buf) > 0 && '>' == buf[0], nil
 	}
+
+	return len(buf) > 0 && '>' == buf[0], nil
 }
 
+// WaitForTinyMeshConfig wait for `remote` to enter config mode
 func WaitForTinyMeshConfig(remote *SerialRemote) error {
 	inCfg, err := inTinyMeshConfig(remote)
 
@@ -61,10 +62,10 @@ func WaitForTinyMeshConfig(remote *SerialRemote) error {
 
 		if nil == buf {
 			return err
-		} else {
-			if len(buf) > 0 && '>' == buf[0] {
-				return nil
-			}
+		}
+
+		if len(buf) > 0 && '>' == buf[0] {
+			return nil
 		}
 	}
 }
@@ -77,14 +78,14 @@ func verifyTinyMeshConfig(remote *SerialRemote, flags Flags) error {
 	}
 	//
 	if true == inCfg {
-		_, err := remote.Write([]byte("X"), -1)
+		_, _ = remote.Write([]byte("X"), -1)
 
 		inCfg, err = inTinyMeshConfig(remote)
 
 		if nil != err {
 			return err
 		} else if true == inCfg {
-			return fmt.Errorf("serial:config/verifyTinyMeshConfig: failed to exit config mode\n")
+			return fmt.Errorf("serial:config/verifyTinyMeshConfig: failed to exit config mode")
 		}
 	}
 
@@ -100,19 +101,19 @@ func verifyTinyMeshConfig(remote *SerialRemote, flags Flags) error {
 		buf, err := remote.Recv(2 * time.Millisecond)
 
 		if nil != buf {
-			ev, err := decode(buf)
-			if nil == err && 18 == ev.detail {
-				if !flags.nid.Equal(ev.address) {
-					return fmt.Errorf("serial:config: failed to verify Network ID (%v vs %v)", flags.nid.ToString(), ev.address.ToString())
-				} else if !flags.sid.Equal(ev.sid) {
-					return fmt.Errorf("serial:config: failed to verify System ID (%v vs %v)", flags.sid.ToString(), ev.sid.ToString())
-				} else if !flags.uid.Equal(ev.uid) {
-					return fmt.Errorf("serial:config: failed to verify Unique ID (%v vs %v)", flags.uid.ToString(), ev.uid.ToString())
+			ev, err2 := decode(buf)
+			if nil == err2 && 18 == ev.detail {
+				if !flags.NID.Equal(ev.address) {
+					return fmt.Errorf("serial:config: failed to verify Network ID (%v vs %v)", flags.NID.ToString(), ev.address.ToString())
+				} else if !flags.SID.Equal(ev.sid) {
+					return fmt.Errorf("serial:config: failed to verify System ID (%v vs %v)", flags.SID.ToString(), ev.sid.ToString())
+				} else if !flags.UID.Equal(ev.uid) {
+					return fmt.Errorf("serial:config: failed to verify Unique ID (%v vs %v)", flags.UID.ToString(), ev.uid.ToString())
 				}
 
 				return nil
 
-			} else if nil != err || 18 != ev.detail {
+			} else if nil != err2 || 18 != ev.detail {
 
 				tries = tries + 1
 
@@ -152,7 +153,7 @@ func ensureTinyMeshConfig(remote *SerialRemote, flags Flags) error {
 
 	cal, err := remote.Recv(255 * time.Millisecond)
 	if nil != err {
-		fmt.Errorf("serial:config: failed to read calibration memory: %v", err)
+		return fmt.Errorf("serial:config: failed to read calibration memory: %v", err)
 	}
 
 	usingProtocol := cfg[3]
@@ -181,18 +182,18 @@ func ensureTinyMeshConfig(remote *SerialRemote, flags Flags) error {
 		newCfg = append(newCfg, ConfigValue{3, 0})
 	}
 
-	if !flags.uid.Equal(uid) {
-		newCfg = append(newCfg, ConfigValue{45, flags.uid[0]})
-		newCfg = append(newCfg, ConfigValue{46, flags.uid[1]})
-		newCfg = append(newCfg, ConfigValue{47, flags.uid[2]})
-		newCfg = append(newCfg, ConfigValue{48, flags.uid[3]})
+	if !flags.UID.Equal(uid) {
+		newCfg = append(newCfg, ConfigValue{45, flags.UID[0]})
+		newCfg = append(newCfg, ConfigValue{46, flags.UID[1]})
+		newCfg = append(newCfg, ConfigValue{47, flags.UID[2]})
+		newCfg = append(newCfg, ConfigValue{48, flags.UID[3]})
 	}
 
-	if !flags.sid.Equal(sid) {
-		newCfg = append(newCfg, ConfigValue{49, flags.sid[0]})
-		newCfg = append(newCfg, ConfigValue{50, flags.sid[1]})
-		newCfg = append(newCfg, ConfigValue{51, flags.sid[2]})
-		newCfg = append(newCfg, ConfigValue{52, flags.sid[3]})
+	if !flags.SID.Equal(sid) {
+		newCfg = append(newCfg, ConfigValue{49, flags.SID[0]})
+		newCfg = append(newCfg, ConfigValue{50, flags.SID[1]})
+		newCfg = append(newCfg, ConfigValue{51, flags.SID[2]})
+		newCfg = append(newCfg, ConfigValue{52, flags.SID[3]})
 	}
 
 	if len(newCfg) > 0 {
@@ -202,17 +203,17 @@ func ensureTinyMeshConfig(remote *SerialRemote, flags Flags) error {
 		}
 	}
 
-	if !flags.nid.Equal(nid) {
-		setNid := []ConfigValue{
-			ConfigValue{23, flags.nid[0]},
-			ConfigValue{24, flags.nid[1]},
-			ConfigValue{25, flags.nid[2]},
-			ConfigValue{26, flags.nid[3]},
+	if !flags.NID.Equal(nid) {
+		setNID := []ConfigValue{
+			ConfigValue{23, flags.NID[0]},
+			ConfigValue{24, flags.NID[1]},
+			ConfigValue{25, flags.NID[2]},
+			ConfigValue{26, flags.NID[3]},
 		}
 
 		log.Println("serial:config: set calibration")
-		if err = SetCalibrationMemory(remote, setNid); err != nil {
-			log.Fatalf("serial:config:failed to set calibration memory: %v\n :: %v\n", setNid, err)
+		if err = SetCalibrationMemory(remote, setNID); err != nil {
+			log.Fatalf("serial:config:failed to set calibration memory: %v\n :: %v\n", setNID, err)
 		}
 	}
 

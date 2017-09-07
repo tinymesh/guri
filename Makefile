@@ -1,5 +1,5 @@
 
-FILES := $(shell find src/ -type f)
+FILES := $(shell find guri/ -type f)
 
 all: linux darwin windows
 
@@ -35,4 +35,4 @@ dist/guri-windows-amd64.exe: GOARCH = amd64
 dist/guri-windows-386.exe: GOOS = windows
 dist/guri-windows-386.exe: GOARCH = 386
 dist/guri-%: $(FILES)
-	cd src/; GOARCH=$(GOARCH) GOOS=$(GOOS) go build -o ../$@
+	GOARCH=$(GOARCH) GOOS=$(GOOS) go build -o $@
